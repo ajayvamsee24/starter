@@ -14,16 +14,24 @@
 
 package com.google.codelab.mlkit;
 
+import android.content.ActivityNotFoundException;
 import android.content.Context;
+import android.content.Intent;
 import android.content.res.AssetManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.net.Uri;
 import android.os.Bundle;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.content.FileProvider;
 
+import android.os.Environment;
+import android.provider.MediaStore;
 import android.util.Pair;
+import android.view.MotionEvent;
 import android.view.View;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
@@ -44,9 +52,12 @@ import com.google.mlkit.vision.text.TextRecognition;
 import com.google.mlkit.vision.text.TextRecognizer;
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.text.SimpleDateFormat;
 import java.util.Comparator;
+import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.PriorityQueue;
@@ -88,6 +99,11 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
     /* Preallocated buffers for storing image data. */
     private final int[] intValues = new int[DIM_IMG_SIZE_X * DIM_IMG_SIZE_Y];
 
+    static final int REQUEST_IMAGE_CAPTURE=1;
+
+    String currentPhotoPath;
+
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -111,12 +127,23 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
                 runFaceContourDetection();
             }
         });
+
         Spinner dropdown = findViewById(R.id.spinner);
-        String[] items = new String[]{"Test Image 1 (Text)", "Test Image 2 (Face)","Ajay"};
+        String[] items = new String[]{"Test Image 1 (Text)", "Test Image 2 (Face)","Ajay","Take Picture"};
         ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout
                 .simple_spinner_dropdown_item, items);
         dropdown.setAdapter(adapter);
         dropdown.setOnItemSelectedListener(this);
+
+
+    }
+
+    private void galleryAddpic() {
+        Intent mediaScanIntent=new Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE);
+        File f=new File(currentPhotoPath);
+        Uri contentUri=Uri.fromFile(f);
+        mediaScanIntent.setData(contentUri);
+        this.sendBroadcast(mediaScanIntent);
     }
 
     private void runTextRecognition() {
@@ -259,6 +286,10 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
                 break;
             case 2:
                 mSelectedImage=getBitmapFromAsset(this,"ajay.jpeg");
+                break;
+            case 3:
+                dispatchTakePictureIntent();
+                break;
         }
         if (mSelectedImage != null) {
             // Get the dimensions of the View
@@ -282,6 +313,62 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
 
             mImageView.setImageBitmap(resizedBitmap);
             mSelectedImage = resizedBitmap;
+        }
+    }
+
+    private void dispatchTakePictureIntent() {
+        Intent takePictureIntent=new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+        if(takePictureIntent.resolveActivity(getPackageManager())!=null){
+            // File to store Image
+            File photoFile=null;
+            try {
+                photoFile = createImageFile();
+            }catch (IOException e){
+                e.printStackTrace();
+            }
+
+
+                if(photoFile!=null){
+                    Uri photoURI= FileProvider.getUriForFile(this,"com.example.android.fileprovider",photoFile);
+                    takePictureIntent.putExtra(MediaStore.EXTRA_OUTPUT,photoURI);
+                    startActivityForResult(takePictureIntent,REQUEST_IMAGE_CAPTURE);
+                }
+
+        }
+        try{
+            startActivityForResult(takePictureIntent,REQUEST_IMAGE_CAPTURE);
+        }catch (ActivityNotFoundException e){
+            e.printStackTrace();
+        }
+    }
+
+
+    private File createImageFile() throws IOException {
+        String timeStamp=new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date());
+        String imageFileName="JPEG_"+timeStamp+"_";
+        File storageDir=getExternalFilesDir(Environment.DIRECTORY_PICTURES);
+        File image=File.createTempFile(
+                imageFileName,
+                ".jpg",
+                storageDir
+        );
+        currentPhotoPath=image.getAbsolutePath();
+        galleryAddpic();
+
+        return image;
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+
+        if(requestCode==REQUEST_IMAGE_CAPTURE && resultCode==RESULT_OK){
+            assert data != null;
+            Bundle extras=data.getExtras();
+            mSelectedImage= (Bitmap) extras.get("data");
+
+            mImageView.setImageBitmap((Bitmap) data.getExtras().get("data"));
+
         }
     }
 
